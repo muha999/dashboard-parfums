@@ -263,12 +263,11 @@ if (!isAuthenticated) {
             </div>
             <p className="font-body text-base text-gold-dim mt-2">Stock, ventes et gains, en un coup d'œil.</p>
           </div>
-          <button
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            aria-label={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
-            className="p-2.5 rounded-full bg-panel border border-hairline text-gold-dim hover:text-cream transition-colors"
+          <button 
+            onClick={handleLogout}
+            className="p-2.5 rounded-full text-red-500 hover:text-red-400 font-semibold transition-colors"
           >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            Déconnexion
           </button>
         </div>
 

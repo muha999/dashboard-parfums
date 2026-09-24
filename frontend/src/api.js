@@ -3,7 +3,7 @@ const API_URL = 'http://127.0.0.1:8000/api'
 // Fonction pour récupérer le token et préparer les en-têtes (headers)
 function getAuthHeaders(isFormData = false) {
   // Remplace 'access' par 'token' si c'est sous ce nom que tu l'as sauvegardé dans ton Login.jsx
-  const token = localStorage.getItem('access');
+  const token = localStorage.getItem('access_token');
   const headers = {};
 
   if (token) {
