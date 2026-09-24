@@ -4,6 +4,15 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from django.contrib.auth.models import User
+
+# Création automatique du compte administrateur au démarrage
+try:
+    if not User.objects.filter(username='Maman').exists():
+        User.objects.create_superuser('Maman', 'maman@test.com', 'MotDePasse123!')
+        print("Compte Maman créé avec succès !")
+except Exception:
+    pass
 
 urlpatterns = [
     path('admin/', admin.site.urls),
