@@ -8,16 +8,7 @@ class PerfumeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Perfume
-        fields = [
-            "id",
-            "name",
-            "brand",
-            "image",
-            "buy_price",
-            "sell_price",
-            "stock",
-            "margin",
-        ]
+        fields = ["id", "name", "brand", "category", "image", "buy_price", "sell_price", "stock", "margin"]
 
 
 class SaleSerializer(serializers.ModelSerializer):
@@ -26,15 +17,4 @@ class SaleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sale
-        fields = [
-            "id",
-            "perfume",
-            "perfume_name",
-            "quantity",
-            "unit_sell_price",
-            "unit_buy_price",
-            "date",
-            "revenue",
-            "gain",
-            "created_at",
-        ]
+        fields = ["id", "perfume", "perfume_name", "category", "status", "customer_name", "customer_phone", "quantity", "unit_sell_price", "unit_buy_price", "date", "revenue", "gain", "created_at"]

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DashboardParfums</string>
+    <string name="title_activity_main">DashboardParfums</string>
+    <string name="package_name">com.dashboard.parfums</string>
+    <string name="custom_url_scheme">com.dashboard.parfums</string>
+</resources>

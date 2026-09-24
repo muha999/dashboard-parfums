@@ -1,18 +1,46 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, Droplet, Check, X, Pencil, Trash2, Wallet, Package } from 'lucide-react'
+import { Sparkles, Droplet, Check, X, Pencil, Trash2, Wallet, Package, Eye, EyeOff, Sun, Moon } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { createPerfume, updatePerfume, deletePerfume, listPerfumes, listSales, sellPerfume, deleteSale } from './api'
+import { createPerfume, updatePerfume, deletePerfume, listPerfumes, listSales, sellPerfume, deleteSale, confirmSale } from './api'
+import Login from './Login';
 
 const tabs = [
   { id: 'apercu', label: 'Aperçu' },
-  { id: 'stock', label: 'Stock' },
+  { id: 'attente', label: 'En attente' },
   { id: 'ventes', label: 'Ventes' },
 ]
 
-const emptyForm = { name: '', brand: '', buyPrice: '', sellPrice: '', stock: '' }
+const emptyForm = { name: '', brand: '', category: 'parfums', buyPrice: '', sellPrice: '', stock: '' }
+
+const CATEGORY_LABELS = {
+  parfums: 'Parfums',
+  chaussures: 'Chaussures',
+  electronique: 'Électronique',
+  autre: 'Autre',
+}
 
 export default function App() {
   const [tab, setTab] = useState('apercu')
+  const [showGains, setShowGains] = useState(true)
+  const [theme, setTheme] = useState('dark')
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem('access_token')) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    setIsAuthenticated(false);
+  };
+
+  const THEME_HEX =
+    theme === 'dark'
+      ? { accent: '#4caf7d', grid: '#2a2a2a', mutedText: '#9a9a9a', tooltipBg: '#161616', tooltipText: '#f2f2f2', tabActiveBg: '#1c1c1c', overlayBg: 'rgba(13,13,13,0.85)' }
+      : { accent: '#2f9e64', grid: '#dcdcdc', mutedText: '#6b6b6b', tooltipBg: '#ffffff', tooltipText: '#1a1a1a', tabActiveBg: '#ffffff', overlayBg: 'rgba(255,255,255,0.85)' }
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -38,6 +66,7 @@ export default function App() {
     setForm({
       name: p.name,
       brand: p.brand || '',
+      category: p.category || 'parfums',
       buyPrice: String(p.buy_price),
       sellPrice: String(p.sell_price),
       stock: String(p.stock),
@@ -78,15 +107,21 @@ export default function App() {
     refreshSales()
   }, [])
 
-  const totalGain = sales.reduce((sum, s) => sum + s.gain, 0)
-  const totalRevenue = sales.reduce((sum, s) => sum + s.revenue, 0)
-  const stockValue = perfumes.reduce((sum, p) => sum + p.stock * p.buy_price, 0)
-  const stockUnits = perfumes.reduce((sum, p) => sum + p.stock, 0)
+  const [selectedCategory, setSelectedCategory] = useState('tous')
+  const confirmedSales = sales.filter((s) => s.status === 'confirmed')
+  const pendingSales = sales.filter((s) => s.status === 'pending')
+  const filteredPerfumes = selectedCategory === 'tous' ? perfumes : perfumes.filter((p) => p.category === selectedCategory)
+  const filteredSales = selectedCategory === 'tous' ? confirmedSales : confirmedSales.filter((s) => s.category === selectedCategory)
+
+  const totalGain = filteredSales.reduce((sum, s) => sum + s.gain, 0)
+  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.revenue, 0)
+  const stockValue = filteredPerfumes.reduce((sum, p) => sum + p.stock * p.buy_price, 0)
+  const stockUnits = filteredPerfumes.reduce((sum, p) => sum + p.stock, 0)
 
   const chartData = (() => {
-    if (sales.length === 0) return []
+    if (filteredSales.length === 0) return []
     const byDate = {}
-    sales.forEach((s) => {
+    filteredSales.forEach((s) => {
       byDate[s.date] = (byDate[s.date] || 0) + s.gain
     })
     const dates = Object.keys(byDate).sort()
@@ -100,6 +135,11 @@ export default function App() {
   const [sellingId, setSellingId] = useState(null)
   const [sellQuantity, setSellQuantity] = useState(1)
   const [sellError, setSellError] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+
+  const [confirmPendingId, setConfirmPendingId] = useState(null)
+  const [confirmPendingError, setConfirmPendingError] = useState('')
 
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [deleteError, setDeleteError] = useState('')
@@ -138,17 +178,35 @@ export default function App() {
     setSellingId(perfume.id)
     setSellQuantity(1)
     setSellError('')
+    setCustomerName('')
+    setCustomerPhone('')
   }
 
   async function confirmSell(perfume) {
     setSellError('')
+    if (!customerName.trim()) {
+      setSellError('Le nom du client est obligatoire.')
+      return
+    }
     try {
-      await sellPerfume(perfume.id, sellQuantity)
+      await sellPerfume(perfume.id, sellQuantity, customerName.trim(), customerPhone.trim())
       setSellingId(null)
       refreshPerfumes()
       refreshSales()
     } catch (err) {
       setSellError(err.message)
+    }
+  }
+
+  async function confirmPendingSale(sale) {
+    setConfirmPendingError('')
+    try {
+      await confirmSale(sale.id)
+      setConfirmPendingId(null)
+      refreshPerfumes()
+      refreshSales()
+    } catch (err) {
+      setConfirmPendingError(err.message)
     }
   }
 
@@ -166,6 +224,7 @@ export default function App() {
       const fd = new FormData()
       fd.append('name', form.name)
       fd.append('brand', form.brand)
+      fd.append('category', form.category)
       fd.append('buy_price', form.buyPrice)
       fd.append('sell_price', form.sellPrice)
       fd.append('stock', form.stock)
@@ -190,16 +249,27 @@ export default function App() {
       setSubmitting(false)
     }
   }
-
+if (!isAuthenticated) {
+    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
   return (
-    <div className="min-h-screen bg-ink">
+    <div className={`min-h-screen bg-ink ${theme === 'light' ? 'theme-light' : ''}`}>
       <div className="max-w-6xl mx-auto px-6 sm:px-10 py-10 sm:py-16 text-cream">
-        <div className="mb-10">
-          <div className="flex items-center gap-2.5">
-            <Sparkles className="w-7 h-7 text-gold" />
-            <h1 className="font-display text-4xl sm:text-5xl text-cream">Mon Comptoir à Parfums</h1>
+        <div className="mb-10 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-7 h-7 text-gold" />
+              <h1 className="font-display text-4xl sm:text-5xl text-cream">Mon Comptoir</h1>
+            </div>
+            <p className="font-body text-base text-gold-dim mt-2">Stock, ventes et gains, en un coup d'œil.</p>
           </div>
-          <p className="font-body text-base text-gold-dim mt-2">Stock, ventes et gains, en un coup d'œil.</p>
+          <button
+            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            aria-label={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
+            className="p-2.5 rounded-full bg-panel border border-hairline text-gold-dim hover:text-cream transition-colors"
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
         </div>
 
         <div className="inline-flex bg-panel rounded-lg p-1.5 mb-8">
@@ -209,8 +279,8 @@ export default function App() {
               onClick={() => setTab(t.id)}
               className="font-body px-6 py-3 rounded-md text-base font-medium transition-colors"
               style={{
-                backgroundColor: tab === t.id ? '#26201a' : 'transparent',
-                color: tab === t.id ? '#d4af6a' : '#8a7c62',
+                backgroundColor: tab === t.id ? THEME_HEX.tabActiveBg : 'transparent',
+                color: tab === t.id ? THEME_HEX.accent : THEME_HEX.mutedText,
               }}
             >
               {t.label}
@@ -220,13 +290,50 @@ export default function App() {
 
         <div className="bg-panel rounded-2xl p-6 sm:p-10 border border-hairline">
           {tab === 'apercu' ? (
+            <>
+            <div className="flex flex-wrap gap-2 mb-8">
+              <button
+                onClick={() => setSelectedCategory('tous')}
+                className="font-body text-sm px-4 py-2 rounded-full transition-colors"
+                style={{
+                  backgroundColor: selectedCategory === 'tous' ? THEME_HEX.accent : 'transparent',
+                  color: selectedCategory === 'tous' ? THEME_HEX.tooltipBg : THEME_HEX.mutedText,
+                  border: `1px solid ${selectedCategory === 'tous' ? THEME_HEX.accent : THEME_HEX.grid}`,
+                }}
+              >
+                Tous
+              </button>
+              {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setSelectedCategory(value)}
+                  className="font-body text-sm px-4 py-2 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: selectedCategory === value ? THEME_HEX.accent : 'transparent',
+                    color: selectedCategory === value ? THEME_HEX.tooltipBg : THEME_HEX.mutedText,
+                    border: `1px solid ${selectedCategory === value ? THEME_HEX.accent : THEME_HEX.grid}`,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
               <div>
-                <div className="flex justify-center lg:justify-start mb-6">
-                  <div className="w-36 h-16 rounded-full bg-panel-2 border-2 border-gold flex flex-col items-center justify-center">
+                <div className="flex items-center justify-center lg:justify-start gap-3 mb-6">
+                  <div className="w-36 h-16 rounded-full bg-panel-2 border-2 border-silver flex flex-col items-center justify-center">
                     <span className="font-body text-gold text-xs uppercase tracking-widest">Gains totaux</span>
-                    <span className="font-display text-cream text-base">{totalGain.toLocaleString('fr-FR')} FCFA</span>
+                    <span className="font-display text-cream text-base">
+                      {showGains ? `${totalGain.toLocaleString('fr-FR')} FCFA` : '••••••'}
+                    </span>
                   </div>
+                  <button
+                    onClick={() => setShowGains((v) => !v)}
+                    aria-label={showGains ? 'Masquer les gains' : 'Afficher les gains'}
+                    className="p-2 rounded-full bg-panel-2 text-gold-dim hover:text-cream transition-colors"
+                  >
+                    {showGains ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
                 </div>
 
                 <div className="space-y-3">
@@ -277,21 +384,21 @@ export default function App() {
                       <AreaChart data={chartData}>
                         <defs>
                           <linearGradient id="goldGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#d4af6a" stopOpacity={0.35} />
-                            <stop offset="95%" stopColor="#d4af6a" stopOpacity={0} />
+                            <stop offset="5%" stopColor={THEME_HEX.accent} stopOpacity={0.35} />
+                            <stop offset="95%" stopColor={THEME_HEX.accent} stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#3a3226" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={THEME_HEX.grid} vertical={false} />
                         <XAxis
                           dataKey="date"
                           tickFormatter={(d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                          tick={{ fontSize: 12, fill: '#8a7c62' }}
-                          axisLine={{ stroke: '#3a3226' }}
+                          tick={{ fontSize: 12, fill: THEME_HEX.mutedText }}
+                          axisLine={{ stroke: THEME_HEX.grid }}
                           tickLine={false}
                         />
                         <YAxis
                           tickFormatter={(v) => (v < 1000 ? v : Math.round(v / 1000) + 'k')}
-                          tick={{ fontSize: 12, fill: '#8a7c62' }}
+                          tick={{ fontSize: 12, fill: THEME_HEX.mutedText }}
                           axisLine={false}
                           tickLine={false}
                           width={40}
@@ -299,19 +406,19 @@ export default function App() {
                         <Tooltip
                           formatter={(v) => [v.toLocaleString('fr-FR') + ' FCFA', 'Gains cumulés']}
                           labelFormatter={(d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                          contentStyle={{ background: '#211c17', border: '1px solid #3a3226', borderRadius: 8, fontSize: 13, color: '#f2e8d5' }}
+                          contentStyle={{ background: THEME_HEX.tooltipBg, border: `1px solid ${THEME_HEX.grid}`, borderRadius: 8, fontSize: 13, color: THEME_HEX.tooltipText }}
                         />
-                        <Area type="monotone" dataKey="gains" stroke="#d4af6a" strokeWidth={2} fill="url(#goldGradient)" />
+                        <Area type="monotone" dataKey="gains" stroke={THEME_HEX.accent} strokeWidth={2} fill="url(#goldGradient)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 )}
               </div>
             </div>
-          ) : tab === 'stock' ? (
-            <div>
+
+            <div className="mt-12 pt-10 border-t border-hairline">
               {successMsg && (
-                <div className="font-body mb-6 px-4 py-3 rounded-lg bg-panel-2 border border-gold text-gold text-sm">
+                <div className="font-body mb-6 px-4 py-3 rounded-lg bg-panel-2 border border-silver text-gold text-sm">
                   {successMsg}
                 </div>
               )}
@@ -321,14 +428,14 @@ export default function App() {
                   onClick={openAddForm}
                   className="font-body mb-8 px-5 py-2.5 rounded-lg bg-gold text-ink text-sm font-semibold hover:opacity-90 transition-opacity"
                 >
-                  + Ajouter un parfum
+                  + Ajouter un article
                 </button>
               )}
 
               {showForm && (
                 <form onSubmit={handleSubmit} className="bg-panel-2 border border-hairline rounded-xl p-8 mb-8">
                   <p className="font-display text-xl text-cream mb-5">
-                    {editingId ? 'Modifier ce parfum' : 'Nouveau parfum'}
+                    {editingId ? 'Modifier cet article' : 'Nouvel article'}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <label className="block sm:col-span-2">
@@ -346,6 +453,20 @@ export default function App() {
                         onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
                         className="font-body mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
                       />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="font-body text-base text-gold-dim">Catégorie</span>
+                      <select
+                        value={form.category}
+                        onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                        className="font-body mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
+                      >
+                        {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label className="block sm:col-span-2">
                       <span className="font-body text-base text-gold-dim">Photo (optionnel)</span>
@@ -417,13 +538,15 @@ export default function App() {
 
               {loadingPerfumes ? (
                 <p className="font-body text-base text-gold-dim">Chargement…</p>
-              ) : perfumes.length === 0 ? (
+              ) : filteredPerfumes.length === 0 ? (
                 <p className="font-body text-base text-gold-dim">
-                  Aucun parfum pour l'instant — ajoute le premier avec le bouton ci-dessus.
+                  {perfumes.length === 0
+                    ? "Aucun article pour l'instant — ajoute le premier avec le bouton ci-dessus."
+                    : 'Aucun article dans cette catégorie.'}
                 </p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-                  {perfumes.map((p) => (
+                  {filteredPerfumes.map((p) => (
                     <div key={p.id} className="bg-panel-2 border border-hairline rounded-xl p-4">
                       <div className="relative mb-3">
                         <div className="w-full aspect-square rounded-lg bg-ink flex items-center justify-center overflow-hidden">
@@ -438,7 +561,7 @@ export default function App() {
                             onClick={() => openEditForm(p)}
                             aria-label="Modifier"
                             className="p-1.5 rounded-md text-gold hover:text-cream"
-                            style={{ backgroundColor: 'rgba(23,20,18,0.85)' }}
+                            style={{ backgroundColor: THEME_HEX.overlayBg }}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -449,7 +572,7 @@ export default function App() {
                             }}
                             aria-label="Supprimer"
                             className="p-1.5 rounded-md text-gold hover:text-red-400"
-                            style={{ backgroundColor: 'rgba(23,20,18,0.85)' }}
+                            style={{ backgroundColor: THEME_HEX.overlayBg }}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -463,11 +586,12 @@ export default function App() {
                           </span>
                         )}
                         {p.stock > 0 && p.stock <= 2 && (
-                          <span className="font-body text-xs px-2 py-0.5 rounded-full border border-gold text-gold flex-shrink-0">
+                          <span className="font-body text-xs px-2 py-0.5 rounded-full border border-silver text-gold flex-shrink-0">
                             Stock bas
                           </span>
                         )}
                       </div>
+                      <p className="font-body text-xs text-silver mb-2">{CATEGORY_LABELS[p.category] || 'Autre'}</p>
                       <div className="font-body text-sm text-gold-dim space-y-1 mb-3">
                         <div className="flex justify-between">
                           <span>Achat</span>
@@ -508,34 +632,28 @@ export default function App() {
                       ) : sellingId === p.id ? (
                         <div>
                           <div className="flex items-center justify-center gap-3 mb-2">
-                            <button
-                              type="button"
-                              onClick={() => setSellQuantity((q) => Math.max(1, q - 1))}
-                              className="w-8 h-8 rounded-md bg-hairline text-cream hover:bg-panel"
-                            >
-                              −
-                            </button>
+                            <button type="button" onClick={() => setSellQuantity((q) => Math.max(1, q - 1))} className="w-8 h-8 rounded-md bg-hairline text-cream hover:bg-panel">−</button>
                             <span className="font-money text-base w-6 text-center text-cream">{sellQuantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => setSellQuantity((q) => Math.min(p.stock, q + 1))}
-                              className="w-8 h-8 rounded-md bg-hairline text-cream hover:bg-panel"
-                            >
-                              +
-                            </button>
+                            <button type="button" onClick={() => setSellQuantity((q) => Math.min(p.stock, q + 1))} className="w-8 h-8 rounded-md bg-hairline text-cream hover:bg-panel">+</button>
                           </div>
+                          <input
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            placeholder="Nom du client *"
+                            className="font-body w-full mb-1.5 rounded-lg border border-hairline bg-ink text-cream px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-gold"
+                          />
+                          <input
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(e.target.value)}
+                            placeholder="Téléphone (optionnel)"
+                            className="font-body w-full mb-2 rounded-lg border border-hairline bg-ink text-cream px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-gold"
+                          />
                           {sellError && <p className="font-body text-xs text-red-400 mb-2">{sellError}</p>}
                           <div className="flex gap-2">
-                            <button
-                              onClick={() => confirmSell(p)}
-                              className="font-body flex-1 text-sm font-semibold py-2 rounded-lg bg-gold text-ink hover:opacity-90 transition-opacity flex items-center justify-center gap-1"
-                            >
-                              <Check className="w-4 h-4" /> Confirmer
+                            <button onClick={() => confirmSell(p)} className="font-body flex-1 text-sm font-semibold py-2 rounded-lg bg-gold text-ink hover:opacity-90 transition-opacity flex items-center justify-center gap-1">
+                              <Check className="w-4 h-4" /> Envoyer
                             </button>
-                            <button
-                              onClick={() => setSellingId(null)}
-                              className="px-3 py-2 rounded-lg bg-hairline text-cream hover:bg-panel"
-                            >
+                            <button onClick={() => setSellingId(null)} className="px-3 py-2 rounded-lg bg-hairline text-cream hover:bg-panel">
                               <X className="w-4 h-4" />
                             </button>
                           </div>
@@ -544,7 +662,7 @@ export default function App() {
                         <button
                           disabled={p.stock === 0}
                           onClick={() => startSell(p)}
-                          className="font-body w-full text-sm font-medium py-2 rounded-lg border border-gold text-gold hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="font-body w-full text-sm font-medium py-2 rounded-lg border border-silver text-gold hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           Vendu
                         </button>
@@ -554,13 +672,74 @@ export default function App() {
                 </div>
               )}
             </div>
-          ) : (
+            </>
+          ) : tab === 'attente' ? (
             <div>
-              {sales.length === 0 ? (
-                <p className="font-body text-base text-gold-dim">Aucune vente enregistrée pour l'instant.</p>
+              <p className="font-display text-lg text-cream mb-6">En attente de réception client</p>
+              {pendingSales.length === 0 ? (
+                <p className="font-body text-base text-gold-dim">Aucune vente en attente.</p>
               ) : (
                 <div className="divide-y divide-hairline">
-                  {sales.map((s) => (
+                  {pendingSales.map((s) => (
+                    <div key={s.id} className="py-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-display text-lg text-cream">{s.perfume_name}</p>
+                          <p className="font-body text-sm text-gold-dim">{s.customer_name}{s.customer_phone ? ` · ${s.customer_phone}` : ''}</p>
+                          <p className="font-body text-xs text-gold-dim">{new Date(s.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                          <span className="font-money text-cream">{s.quantity} unité{s.quantity > 1 ? 's' : ''}</span>
+                          <span className="font-money text-cream">{s.revenue.toLocaleString('fr-FR')} FCFA</span>
+                        </div>
+                        <div className="flex gap-2">
+                          {confirmPendingId === s.id ? (
+                            <>
+                              {confirmPendingError && <span className="font-body text-xs text-red-400">{confirmPendingError}</span>}
+                              <button onClick={() => confirmPendingSale(s)} className="font-body text-xs font-semibold px-3 py-1.5 rounded-lg bg-gold text-ink hover:opacity-90 flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" /> Confirmer réception
+                              </button>
+                              <button onClick={() => setConfirmPendingId(null)} className="p-1.5 rounded-lg bg-hairline text-cream">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => { setConfirmPendingId(s.id); setConfirmPendingError('') }}
+                                className="font-body text-xs font-semibold px-3 py-1.5 rounded-lg border border-gold text-gold hover:bg-panel flex items-center gap-1"
+                              >
+                                <Check className="w-3.5 h-3.5" /> Reçu
+                              </button>
+                              <button
+                                onClick={() => { setConfirmDeleteSaleId(s.id); setDeleteSaleError('') }}
+                                className="p-1.5 rounded-lg bg-hairline text-red-400 hover:opacity-80"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                          {confirmDeleteSaleId === s.id && (
+                            <div className="flex items-center gap-2 mt-2 w-full">
+                              {deleteSaleError && <span className="font-body text-xs text-red-400">{deleteSaleError}</span>}
+                              <button onClick={() => confirmDeleteSale(s)} className="font-body text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 text-ink hover:opacity-90">Annuler la vente</button>
+                              <button onClick={() => setConfirmDeleteSaleId(null)} className="p-1.5 rounded-lg bg-hairline text-cream"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              {confirmedSales.length === 0 ? (
+                <p className="font-body text-base text-gold-dim">Aucune vente confirmée pour l'instant.</p>
+              ) : (
+                <div className="divide-y divide-hairline">
+                  {confirmedSales.map((s) => (
                     <div key={s.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4">
                       <div className="flex-1 min-w-0">
                         <p className="font-display text-lg text-cream">{s.perfume_name}</p>

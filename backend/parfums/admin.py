@@ -5,9 +5,9 @@ from .models import Perfume, Sale
 
 @admin.register(Perfume)
 class PerfumeAdmin(admin.ModelAdmin):
-    list_display = ("name", "brand", "buy_price", "sell_price", "margin", "stock")
+    list_display = ("name", "category", "brand", "buy_price", "sell_price", "margin", "stock")
     search_fields = ("name", "brand")
-    list_filter = ("brand",)
+    list_filter = ("category", "brand")
 
 
 @admin.register(Sale)

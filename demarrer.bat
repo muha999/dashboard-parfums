@@ -2,7 +2,7 @@
 echo Demarrage de Mon Comptoir a Parfums...
 echo.
 
-start /min "Backend Django" cmd /k "cd /d %~dp0backend && call venv\Scripts\activate && python manage.py runserver"
+start /min "Backend Django" cmd /k "cd /d %~dp0backend && call venv\Scripts\activate && python manage.py migrate && python manage.py runserver"
 
 timeout /t 3 /nobreak >nul
 
