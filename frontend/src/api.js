@@ -1,4 +1,4 @@
-const API_URL = 'http://127.0.0.1:8000/api'
+const API_URL = 'https://dashboard-parfums-api-muha999.onrender.com'
 
 // Fonction pour récupérer le token et préparer les en-têtes (headers)
 function getAuthHeaders(isFormData = false) {
