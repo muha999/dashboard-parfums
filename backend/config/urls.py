@@ -11,12 +11,12 @@ from django.contrib.auth.models import User
 try:
     # Le compte de ta mère
     if not User.objects.filter(username='Maman').exists():
-        User.objects.create_superuser('Maman', 'maman@test.com', 'MotDePasse123!')
+        User.objects.create_superuser('Maman', 'lomouha260@gmail.com', 'Awalo1977')
         print("Compte Maman créé avec succès !")
         
     # Un autre compte (tu peux modifier le nom et le mot de passe)
     if not User.objects.filter(username='Vendeur').exists():
-        User.objects.create_superuser('Mouha_lo', 'vendeur@test.com', '2010qwer')
+        User.objects.create_superuser('Mouha_lo', 'lomouha250@gmail.com.com', '2010qwer')
         print("Compte Vendeur créé avec succès !")
 except Exception:
     pass
