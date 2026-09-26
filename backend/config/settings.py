@@ -124,13 +124,7 @@ STATIC_URL = 'static/'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# App locale uniquement : le frontend React tourne sur localhost en dev
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+CORS_ALLOW_ORIGINS = True
 
 # Usage personnel local, pas besoin d'authentification
 REST_FRAMEWORK = {

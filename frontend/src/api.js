@@ -1,4 +1,4 @@
-const API_URL = 'https://dashboard-parfums-api-muha999.onrender.com'
+const API_URL = 'https://dashboard-parfums-muha999.onrender.com'
 
 // Fonction pour récupérer le token et préparer les en-têtes (headers)
 function getAuthHeaders(isFormData = false) {

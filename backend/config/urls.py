@@ -15,8 +15,8 @@ try:
         print("Compte Maman créé avec succès !")
         
     # Un autre compte (tu peux modifier le nom et le mot de passe)
-    if not User.objects.filter(username='Vendeur').exists():
-        User.objects.create_superuser('Mouha_lo', 'lomouha250@gmail.com.com', '2010qwer')
+    if not User.objects.filter(username='Mouha_lo').exists():
+        User.objects.create_superuser('Mouha_lo', 'lomouha250@gmail.com', '2010qwer')
         print("Compte Vendeur créé avec succès !")
 except Exception:
     pass
