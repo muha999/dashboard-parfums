@@ -1,4 +1,4 @@
-import AssistantIA from './AssistantIA'; // Ajoute './components/AssistantIA' si tu l'as rangé dans le sous-dossier
+import AssistantIA from './AssistantIA';
 import { useState, useEffect } from 'react'
 import { Sparkles, Droplet, Check, X, Pencil, Trash2, Wallet, Package, Eye, EyeOff, Sun, Moon } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -65,12 +65,12 @@ export default function App() {
   function openEditForm(p) {
     setEditingId(p.id)
     setForm({
-      name: p.name,
+      name: p.nom || '',
       brand: p.brand || '',
-      category: p.category || 'parfums',
-      buyPrice: String(p.buy_price),
-      sellPrice: String(p.sell_price),
-      stock: String(p.stock),
+      category: p.categorie || 'parfums',
+      buyPrice: String(p.buy_price || 0),
+      sellPrice: String(p.prix || 0),
+      stock: String(p.stock || 0),
     })
     setImageFile(null)
     setImagePreview(p.image || null)
@@ -109,21 +109,26 @@ export default function App() {
   }, [])
 
   const [selectedCategory, setSelectedCategory] = useState('tous')
-  const confirmedSales = sales.filter((s) => s.status === 'confirmed')
-  const pendingSales = sales.filter((s) => s.status === 'pending')
-  const filteredPerfumes = selectedCategory === 'tous' ? perfumes : perfumes.filter((p) => p.category === selectedCategory)
-  const filteredSales = selectedCategory === 'tous' ? confirmedSales : confirmedSales.filter((s) => s.category === selectedCategory)
+  
+  // Avec Supabase, on considère toutes les ventes comme confirmées pour ce premier test
+  const confirmedSales = sales;
+  const pendingSales = []; 
 
-  const totalGain = filteredSales.reduce((sum, s) => sum + s.gain, 0)
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.revenue, 0)
-  const stockValue = filteredPerfumes.reduce((sum, p) => sum + p.stock * p.buy_price, 0)
+  const filteredPerfumes = selectedCategory === 'tous' ? perfumes : perfumes.filter((p) => p.categorie === selectedCategory)
+  const filteredSales = selectedCategory === 'tous' ? confirmedSales : confirmedSales.filter((s) => s.articles?.categorie === selectedCategory)
+
+  // Adaptation temporaire des calculs de gains (sera affiné plus tard)
+  const totalGain = filteredSales.reduce((sum, s) => sum + (s.prix_total || 0), 0)
+  const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.prix_total || 0), 0)
+  const stockValue = filteredPerfumes.reduce((sum, p) => sum + p.stock * (p.prix || 0), 0)
   const stockUnits = filteredPerfumes.reduce((sum, p) => sum + p.stock, 0)
 
   const chartData = (() => {
     if (filteredSales.length === 0) return []
     const byDate = {}
     filteredSales.forEach((s) => {
-      byDate[s.date] = (byDate[s.date] || 0) + s.gain
+      const d = s.created_at ? s.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+      byDate[d] = (byDate[d] || 0) + (s.prix_total || 0)
     })
     const dates = Object.keys(byDate).sort()
     let cumul = 0
@@ -160,6 +165,7 @@ export default function App() {
   const [deleteSaleError, setDeleteSaleError] = useState('')
 
   function isSaleRecent(s) {
+    if (!s.created_at) return false;
     return Date.now() - new Date(s.created_at).getTime() < 24 * 60 * 60 * 1000
   }
 
@@ -223,20 +229,22 @@ export default function App() {
     setSubmitting(true)
     try {
       const fd = new FormData()
-      fd.append('name', form.name)
-      fd.append('brand', form.brand)
-      fd.append('category', form.category)
-      fd.append('buy_price', form.buyPrice)
-      fd.append('sell_price', form.sellPrice)
+      
+      // On adapte les noms des champs pour qu'ils correspondent à la BDD Supabase
+      fd.append('nom', form.name)
+      fd.append('categorie', form.category)
+      fd.append('prix', form.sellPrice)
       fd.append('stock', form.stock)
-      if (imageFile) fd.append('image', imageFile)
+      
+      // L'image est temporairement désactivée le temps de configurer le stockage
+      // if (imageFile) fd.append('image', imageFile)
 
       if (editingId) {
         const updated = await updatePerfume(editingId, fd)
-        setSuccessMsg(`« ${updated.name} » mis à jour avec succès.`)
+        setSuccessMsg(`« ${updated.nom} » mis à jour avec succès.`)
       } else {
         const created = await createPerfume(fd)
-        setSuccessMsg(`« ${created.name} » ajouté avec succès.`)
+        setSuccessMsg(`« ${created.nom} » ajouté avec succès.`)
       }
       setForm(emptyForm)
       setImageFile(null)
@@ -250,9 +258,12 @@ export default function App() {
       setSubmitting(false)
     }
   }
-if (!isAuthenticated) {
-    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
-  }
+
+  // 🛡️ L'ANCIEN SYSTÈME DE CONNEXION EST DÉSACTIVÉ ICI
+  // if (!isAuthenticated) {
+  //  return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+  // }
+
   return (
     <div className={`min-h-screen bg-ink ${theme === 'light' ? 'theme-light' : ''}`}>
       <div className="max-w-6xl mx-auto px-6 sm:px-10 py-10 sm:py-16 text-cream">
@@ -364,7 +375,7 @@ if (!isAuthenticated) {
                       <Droplet className="w-5 h-5 text-gold" />
                     </div>
                     <div>
-                      <p className="font-body text-xs text-gold-dim uppercase tracking-wide">Flacons en stock</p>
+                      <p className="font-body text-xs text-gold-dim uppercase tracking-wide">Articles en stock</p>
                       <p className="font-money text-lg font-semibold text-cream">{stockUnits}</p>
                     </div>
                   </div>
@@ -439,18 +450,10 @@ if (!isAuthenticated) {
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <label className="block sm:col-span-2">
-                      <span className="font-body text-base text-gold-dim">Nom du parfum</span>
+                      <span className="font-body text-base text-gold-dim">Nom de l'article</span>
                       <input
                         value={form.name}
                         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                        className="font-body mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
-                      />
-                    </label>
-                    <label className="block sm:col-span-2">
-                      <span className="font-body text-base text-gold-dim">Marque (optionnel)</span>
-                      <input
-                        value={form.brand}
-                        onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
                         className="font-body mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
                       />
                     </label>
@@ -469,9 +472,9 @@ if (!isAuthenticated) {
                       </select>
                     </label>
                     <label className="block sm:col-span-2">
-                      <span className="font-body text-base text-gold-dim">Photo (optionnel)</span>
+                      <span className="font-body text-base text-gold-dim">Photo (Désactivée temporairement)</span>
                       <div className="mt-1.5 flex items-center gap-4">
-                        <div className="w-20 h-20 rounded-lg bg-ink border border-hairline flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <div className="w-20 h-20 rounded-lg bg-ink border border-hairline flex items-center justify-center overflow-hidden flex-shrink-0 opacity-50">
                           {imagePreview ? (
                             <img src={imagePreview} alt="" className="w-full h-full object-cover" />
                           ) : (
@@ -481,27 +484,18 @@ if (!isAuthenticated) {
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={handleImageChange}
-                          className="font-body text-sm text-gold-dim file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-hairline file:text-cream hover:file:bg-panel"
+                          disabled
+                          className="font-body text-sm text-gold-dim opacity-50 cursor-not-allowed file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-hairline file:text-cream"
                         />
                       </div>
                     </label>
-                    <label className="block">
-                      <span className="font-body text-base text-gold-dim">Prix d'achat (FCFA)</span>
-                      <input
-                        type="number"
-                        value={form.buyPrice}
-                        onChange={(e) => setForm((f) => ({ ...f, buyPrice: e.target.value }))}
-                        className="font-money mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
-                      />
-                    </label>
-                    <label className="block">
+                    <label className="block sm:col-span-2">
                       <span className="font-body text-base text-gold-dim">Prix de vente (FCFA)</span>
                       <input
                         type="number"
                         value={form.sellPrice}
                         onChange={(e) => setForm((f) => ({ ...f, sellPrice: e.target.value }))}
-                        className="font-money mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
+                        className="font-money mt-1.5 w-full rounded-lg border border-hairline bg-ink text-cream px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gold sm:w-1/2"
                       />
                     </label>
                     <label className="block sm:col-span-2">
@@ -551,7 +545,7 @@ if (!isAuthenticated) {
                       <div className="relative mb-3">
                         <div className="w-full aspect-square rounded-lg bg-ink flex items-center justify-center overflow-hidden">
                           {p.image ? (
-                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                            <img src={p.image} alt={p.nom} className="w-full h-full object-cover" />
                           ) : (
                             <Droplet className="w-9 h-9 text-gold-dim" />
                           )}
@@ -579,7 +573,7 @@ if (!isAuthenticated) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mb-2">
-                        <p className="font-display text-lg text-cream truncate">{p.name}</p>
+                        <p className="font-display text-lg text-cream truncate">{p.nom}</p>
                         {p.stock === 0 && (
                           <span className="font-body text-xs px-2 py-0.5 rounded-full bg-hairline text-gold-dim flex-shrink-0">
                             Épuisé
@@ -591,19 +585,11 @@ if (!isAuthenticated) {
                           </span>
                         )}
                       </div>
-                      <p className="font-body text-xs text-silver mb-2">{CATEGORY_LABELS[p.category] || 'Autre'}</p>
+                      <p className="font-body text-xs text-silver mb-2">{CATEGORY_LABELS[p.categorie] || 'Autre'}</p>
                       <div className="font-body text-sm text-gold-dim space-y-1 mb-3">
                         <div className="flex justify-between">
-                          <span>Achat</span>
-                          <span className="font-money text-cream">{p.buy_price.toLocaleString('fr-FR')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Vente</span>
-                          <span className="font-money text-cream">{p.sell_price.toLocaleString('fr-FR')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Gain</span>
-                          <span className="font-money text-gold font-medium">{p.margin.toLocaleString('fr-FR')}</span>
+                          <span>Prix</span>
+                          <span className="font-money text-cream">{(p.prix || 0).toLocaleString('fr-FR')}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Stock</span>
@@ -612,7 +598,7 @@ if (!isAuthenticated) {
                       </div>
                       {confirmDeleteId === p.id ? (
                         <div>
-                          <p className="font-body text-sm text-cream mb-2">Supprimer ce parfum ?</p>
+                          <p className="font-body text-sm text-cream mb-2">Supprimer cet article ?</p>
                           {deleteError && <p className="font-body text-xs text-red-400 mb-2">{deleteError}</p>}
                           <div className="flex gap-2">
                             <button
@@ -684,13 +670,13 @@ if (!isAuthenticated) {
                     <div key={s.id} className="py-4">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                         <div className="flex-1 min-w-0">
-                          <p className="font-display text-lg text-cream">{s.perfume_name}</p>
+                          <p className="font-display text-lg text-cream">{s.articles ? s.articles.nom : 'Article inconnu'}</p>
                           <p className="font-body text-sm text-gold-dim">{s.customer_name}{s.customer_phone ? ` · ${s.customer_phone}` : ''}</p>
-                          <p className="font-body text-xs text-gold-dim">{new Date(s.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                          <p className="font-body text-xs text-gold-dim">{new Date(s.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
                         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                          <span className="font-money text-cream">{s.quantity} unité{s.quantity > 1 ? 's' : ''}</span>
-                          <span className="font-money text-cream">{s.revenue.toLocaleString('fr-FR')} FCFA</span>
+                          <span className="font-money text-cream">{s.quantite} unité{s.quantite > 1 ? 's' : ''}</span>
+                          <span className="font-money text-cream">{(s.prix_total || 0).toLocaleString('fr-FR')} FCFA</span>
                         </div>
                         <div className="flex gap-2">
                           {confirmPendingId === s.id ? (
@@ -742,9 +728,9 @@ if (!isAuthenticated) {
                   {confirmedSales.map((s) => (
                     <div key={s.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-display text-lg text-cream">{s.perfume_name}</p>
+                        <p className="font-display text-lg text-cream">{s.articles ? s.articles.nom : 'Article inconnu'}</p>
                         <p className="font-body text-sm text-gold-dim">
-                          {new Date(s.date).toLocaleDateString('fr-FR', {
+                          {new Date(s.created_at).toLocaleDateString('fr-FR', {
                             day: 'numeric',
                             month: 'long',
                             year: 'numeric',
@@ -754,15 +740,11 @@ if (!isAuthenticated) {
                       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm sm:text-right">
                         <div>
                           <span className="text-gold-dim sm:hidden">Qté </span>
-                          <span className="font-money text-cream">{s.quantity}</span>
+                          <span className="font-money text-cream">{s.quantite}</span>
                         </div>
                         <div>
                           <span className="text-gold-dim sm:hidden">CA </span>
-                          <span className="font-money text-cream">{s.revenue.toLocaleString('fr-FR')}</span>
-                        </div>
-                        <div>
-                          <span className="text-gold-dim sm:hidden">Gain </span>
-                          <span className="font-money text-gold font-medium">{s.gain.toLocaleString('fr-FR')}</span>
+                          <span className="font-money text-cream">{(s.prix_total || 0).toLocaleString('fr-FR')}</span>
                         </div>
                       </div>
                       <div className="sm:ml-2">
@@ -812,7 +794,6 @@ if (!isAuthenticated) {
           )}
         </div>
       </div>
-      {/* Ajoute l'assistant juste ici, avant le </div> final */}
       <AssistantIA />
     </div>
   )
